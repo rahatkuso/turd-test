@@ -33,6 +33,8 @@
 #include <boost/utility/value_init.hpp>
 #include <boost/interprocess/detail/atomic.hpp>
 #include <boost/algorithm/string.hpp>
+#include <boost/limits.hpp>
+#include "include_base_utils.h"
 #include "misc_language.h"
 #include "syncobj.h"
 #include "cryptonote_basic_impl.h"
@@ -52,22 +54,19 @@
   #include <mach/mach_host.h>
   #include <AvailabilityMacros.h>
   #include <TargetConditionals.h>
-#elif defined(__linux__)
-  #include <unistd.h>
-  #include <sys/resource.h>
-  #include <sys/times.h>
-  #include <time.h>
-#elif defined(__FreeBSD__)
-  #include <devstat.h>
-  #include <errno.h>
-  #include <fcntl.h>
-  #include <machine/apm_bios.h>
-  #include <stdio.h>
-  #include <sys/resource.h>
-  #include <sys/sysctl.h>
-  #include <sys/times.h>
-  #include <sys/types.h>
-  #include <unistd.h>
+#endif
+
+#ifdef __FreeBSD__
+#include <devstat.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <machine/apm_bios.h>
+#include <stdio.h>
+#include <sys/resource.h>
+#include <sys/sysctl.h>
+#include <sys/times.h>
+#include <sys/types.h>
+#include <unistd.h>
 #endif
 
 #undef MONERO_DEFAULT_LOG_CATEGORY
@@ -78,7 +77,7 @@ using namespace epee;
 #include "miner.h"
 
 
-extern "C" void slow_hash_allocate_state();
+extern "C" void slow_hash_allocate_state(uint32_t memory);
 extern "C" void slow_hash_free_state();
 namespace cryptonote
 {
@@ -96,7 +95,8 @@ namespace cryptonote
   }
 
 
-  miner::miner(i_miner_handler* phandler):m_stop(1),
+  miner::miner(cryptonote::Blockchain* bc, i_miner_handler* phandler):m_stop(1),
+    m_blockchain(bc),
     m_template(boost::value_initialized<block>()),
     m_template_no(0),
     m_diffic(0),
@@ -122,8 +122,7 @@ namespace cryptonote
   //-----------------------------------------------------------------------------------------------------
   miner::~miner()
   {
-    try { stop(); }
-    catch (...) { /* ignore */ }
+    stop();
   }
   //-----------------------------------------------------------------------------------------------------
   bool miner::set_block_template(const block& bl, const difficulty_type& di, uint64_t height)
@@ -147,7 +146,7 @@ namespace cryptonote
   //-----------------------------------------------------------------------------------------------------
   bool miner::request_block_template()
   {
-    block bl;
+    block bl = AUTO_VAL_INIT(bl);
     difficulty_type di = AUTO_VAL_INIT(di);
     uint64_t height = AUTO_VAL_INIT(height);
     uint64_t expected_reward; //only used for RPC calls - could possibly be useful here too?
@@ -200,9 +199,8 @@ namespace cryptonote
       {
         uint64_t total_hr = std::accumulate(m_last_hash_rates.begin(), m_last_hash_rates.end(), 0);
         float hr = static_cast<float>(total_hr)/static_cast<float>(m_last_hash_rates.size());
-        const auto flags = std::cout.flags();
         const auto precision = std::cout.precision();
-        std::cout << "hashrate: " << std::setprecision(4) << std::fixed << hr << std::setiosflags(flags) << std::setprecision(precision) << ENDL;
+        std::cout << "hashrate: " << std::setprecision(4) << std::fixed << hr << precision << ENDL;
       }
     }
     m_last_hr_merge_time = misc_utils::get_tick_count();
@@ -254,7 +252,7 @@ namespace cryptonote
         LOG_ERROR("Target account address " << command_line::get_arg(vm, arg_start_mining) << " has wrong format, starting daemon canceled");
         return false;
       }
-      m_mine_address = info.address;
+      m_mine_address = command_line::get_arg(vm, arg_start_mining);
       m_threads_total = 1;
       m_do_mining = true;
       if(command_line::has_arg(vm, arg_mining_threads))
@@ -284,7 +282,7 @@ namespace cryptonote
     return !m_stop;
   }
   //-----------------------------------------------------------------------------------------------------
-  const account_public_address& miner::get_mining_address() const
+  std::string miner::get_mining_address() const
   {
     return m_mine_address;
   }
@@ -293,7 +291,7 @@ namespace cryptonote
     return m_threads_total;
   }
   //-----------------------------------------------------------------------------------------------------
-  bool miner::start(const account_public_address& adr, size_t threads_count, const boost::thread::attributes& attrs, bool do_background, bool ignore_battery)
+  bool miner::start(std::string adr, size_t threads_count, const boost::thread::attributes& attrs, bool do_background, bool ignore_battery)
   {
     m_mine_address = adr;
     m_threads_total = static_cast<uint32_t>(threads_count);
@@ -329,11 +327,6 @@ namespace cryptonote
     {
       m_background_mining_thread = boost::thread(attrs, boost::bind(&miner::background_worker_thread, this));
       LOG_PRINT_L0("Background mining controller thread started" );
-    }
-
-    if(get_ignore_battery())
-    {
-      MINFO("Ignoring battery");
     }
 
     return true;
@@ -389,7 +382,7 @@ namespace cryptonote
     for(; bl.nonce != std::numeric_limits<uint32_t>::max(); bl.nonce++)
     {
       crypto::hash h;
-      get_block_longhash(bl, h, height);
+      get_block_longhash(bl, h, height, NULL);
 
       if(check_hash(h, diffic))
       {
@@ -445,7 +438,7 @@ namespace cryptonote
     difficulty_type local_diff = 0;
     uint32_t local_template_ver = 0;
     block b;
-    slow_hash_allocate_state();
+    //slow_hash_allocate_state();
     while(!m_stop)
     {
       if(m_pausers_count)//anti split workaround
@@ -487,13 +480,13 @@ namespace cryptonote
 
       b.nonce = nonce;
       crypto::hash h;
-      get_block_longhash(b, h, height);
+      get_block_longhash(b, h, height, m_blockchain);
 
       if(check_hash(h, local_diff))
       {
         //we lucky!
         ++m_config.current_extra_message_index;
-        MGINFO_GREEN("Found block " << get_block_hash(b) << " at height " << height << " for difficulty: " << local_diff);
+        MGINFO_GREEN("Found block at height: " << height);
         if(!m_phandler->handle_block_found(b))
         {
           --m_config.current_extra_message_index;
@@ -638,7 +631,7 @@ namespace cryptonote
         boost::tribool battery_powered(on_battery_power());
         if(!indeterminate( battery_powered ))
         {
-          on_ac_power = !(bool)battery_powered;
+          on_ac_power = !battery_powered;
         }
       }
 
