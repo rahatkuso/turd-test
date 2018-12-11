@@ -1,5 +1,6 @@
 # Turd Currency
 
+Copyright (c) 2018 Turd Currency.
 Copyright (c) 2014-2018 The Monero Project.   
 Portions Copyright (c) 2012-2013 The Cryptonote developers.
 
@@ -71,11 +72,11 @@ Debian / Ubuntu one liner for all dependencies
 
 Clone recursively to pull-in needed submodule(s):
 
-`$ git clone --recursive https://github.com/Autistic-Boy/Turd-Currency/`
+`$ git clone --recursive https://github.com/Autistic-Boy/Turd-Currency/ turd`
 
 If you already have a repo cloned, initialize and update:
 
-`$ cd monero && git submodule init && git submodule update`
+`$ cd turd && git submodule init && git submodule update`
 
 ### Build instructions
 
@@ -109,7 +110,7 @@ invokes cmake commands as needed.
 
 * Add `PATH="$PATH:$HOME/monero/build/release/bin"` to `.profile`
 
-* Run Monero with `monerod --detach`
+* Run Turd with `turdd --detach`
 
 * **Optional**: build and run the test suite to verify the binaries:
 
