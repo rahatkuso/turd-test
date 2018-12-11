@@ -37,7 +37,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "int-util.h"
+#include "common/int-util.h"
 #include "warnings.h"
 
 static inline void *padd(void *p, size_t i) {
@@ -78,8 +78,35 @@ enum {
   HASH_DATA_AREA = 136
 };
 
+#define RANDOM_VALUES 32
+
+enum {
+  NOP = 0,
+  ADD,
+  SUB,
+  XOR,
+  OR,
+  AND,
+  COMP,
+  EQ
+};
+
+typedef struct randomizer_values
+{
+  //list of bitwise functions to perform from the list above
+  uint8_t operators[RANDOM_VALUES];
+  //list of scratchpad locations to perform the bitwise operations on
+  //this has to be uint32_t as the scratchpad is too long to store every possible index in uint16_t
+  uint32_t indices[RANDOM_VALUES];
+  //a list of values to perform the bitwise operations with
+  int8_t values[RANDOM_VALUES];
+} random_values;
+
+void randomize_scratchpad(random_values *r, const char* salt, uint8_t* scratchpad, uint32_t variant);
+
 void cn_fast_hash(const void *data, size_t length, char *hash);
-void cn_slow_hash(const void *data, size_t length, char *hash, int variant, int prehashed);
+void cn_slow_hash(const void *data, size_t length, char *hash, int variant, int prehashed, size_t base_iters, size_t rand_iters, random_values *r, const char* sp_bytes, 
+  uint8_t init_size_blk, uint16_t xx, uint16_t yy, uint16_t zz, uint16_t ww, uint32_t memory);
 
 void hash_extra_blake(const void *data, size_t length, char *hash);
 void hash_extra_groestl(const void *data, size_t length, char *hash);
