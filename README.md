@@ -1,3 +1,4 @@
+![fuckng scamcoin](https://i.imgur.com/Hpv1hop.png)
 # Turd Currency
 
 Copyright (c) 2018 Turd Currency.
