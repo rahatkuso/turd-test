@@ -249,6 +249,7 @@ namespace cryptonote {
   # No limits in rise or fall rate should be employed.
   # MTP should not be used.
   k = (N+1)/2  * T
+
   # original algorithm
   d=0, t=0, j=0
   for i = height - N+1 to height  # (N most recent blocks)
